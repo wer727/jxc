@@ -1,0 +1,587 @@
+import React, { useState } from 'react';
+import { Plus, Trash2, Package, Download, Upload } from 'lucide-react';
+
+const InventorySystem = () => {
+  const [activeTab, setActiveTab] = useState('stock');
+  const [products, setProducts] = useState([
+    { id: 1, name: '商品A', unit: '件', initialStock: 100 },
+    { id: 2, name: '商品B', unit: '个', initialStock: 50 },
+    { id: 3, name: '商品C', unit: '箱', initialStock: 30 }
+  ]);
+  const [purchases, setPurchases] = useState([
+    { id: 1, productId: 1, quantity: 50, date: '2024-11-01', supplier: '供应商A', remark: '' },
+    { id: 2, productId: 2, quantity: 30, date: '2024-11-05', supplier: '供应商B', remark: '' }
+  ]);
+  const [outbounds, setOutbounds] = useState([
+    { id: 1, productId: 1, quantity: 40, date: '2024-11-10', purpose: '销售', remark: '' },
+    { id: 2, productId: 2, quantity: 20, date: '2024-11-12', purpose: '销售', remark: '' }
+  ]);
+
+  // 计算库存
+  const calculateInventory = () => {
+    return products.map(product => {
+      const totalPurchase = purchases
+        .filter(p => p.productId === product.id)
+        .reduce((sum, p) => sum + (parseFloat(p.quantity) || 0), 0);
+      
+      const totalOutbound = outbounds
+        .filter(o => o.productId === product.id)
+        .reduce((sum, o) => sum + (parseFloat(o.quantity) || 0), 0);
+      
+      const currentStock = product.initialStock + totalPurchase - totalOutbound;
+      
+      return {
+        ...product,
+        totalPurchase,
+        totalOutbound,
+        currentStock
+      };
+    });
+  };
+
+  const inventory = calculateInventory();
+
+  // 批量添加进货
+  const addPurchaseRows = () => {
+    const newRows = Array(10).fill(null).map((_, index) => ({
+      id: Date.now() + index,
+      productId: products[0]?.id || '',
+      quantity: '',
+      date: new Date().toISOString().split('T')[0],
+      supplier: '',
+      remark: '',
+      isNew: true
+    }));
+    setPurchases([...purchases, ...newRows]);
+  };
+
+  // 批量添加出库
+  const addOutboundRows = () => {
+    const newRows = Array(10).fill(null).map((_, index) => ({
+      id: Date.now() + index,
+      productId: products[0]?.id || '',
+      quantity: '',
+      date: new Date().toISOString().split('T')[0],
+      purpose: '销售',
+      remark: '',
+      isNew: true
+    }));
+    setOutbounds([...outbounds, ...newRows]);
+  };
+
+  // 更新进货记录
+  const updatePurchase = (id, field, value) => {
+    setPurchases(purchases.map(p => 
+      p.id === id ? { ...p, [field]: value, isNew: false } : p
+    ));
+  };
+
+  // 更新出库记录
+  const updateOutbound = (id, field, value) => {
+    setOutbounds(outbounds.map(o => 
+      o.id === id ? { ...o, [field]: value, isNew: false } : o
+    ));
+  };
+
+  // 删除进货记录
+  const deletePurchase = (id) => {
+    setPurchases(purchases.filter(p => p.id !== id));
+  };
+
+  // 删除出库记录
+  const deleteOutbound = (id) => {
+    setOutbounds(outbounds.filter(o => o.id !== id));
+  };
+
+  // 添加商品
+  const addProduct = () => {
+    const newProduct = {
+      id: Date.now(),
+      name: '新商品',
+      unit: '件',
+      initialStock: 0,
+      isNew: true
+    };
+    setProducts([...products, newProduct]);
+  };
+
+  // 更新商品
+  const updateProduct = (id, field, value) => {
+    setProducts(products.map(p => 
+      p.id === id ? { ...p, [field]: value } : p
+    ));
+  };
+
+  // 删除商品
+  const deleteProduct = (id) => {
+    setProducts(products.filter(p => p.id !== id));
+  };
+
+  // 处理表格粘贴（进货）
+  const handlePurchasePaste = (e, rowId, cellField) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text');
+    const rows = pastedData.split('\n').filter(row => row.trim());
+    
+    const currentIndex = purchases.findIndex(p => p.id === rowId);
+    if (currentIndex === -1) return;
+
+    const updatedPurchases = [...purchases];
+    
+    rows.forEach((row, rowIndex) => {
+      const cells = row.split('\t');
+      const targetIndex = currentIndex + rowIndex;
+      
+      if (targetIndex >= updatedPurchases.length) {
+        // 自动添加新行
+        updatedPurchases.push({
+          id: Date.now() + rowIndex,
+          productId: products[0]?.id || '',
+          quantity: '',
+          date: new Date().toISOString().split('T')[0],
+          supplier: '',
+          remark: ''
+        });
+      }
+
+      const fields = ['date', 'productId', 'quantity', 'supplier', 'remark'];
+      const startFieldIndex = fields.indexOf(cellField);
+      
+      cells.forEach((cell, cellIndex) => {
+        const fieldIndex = startFieldIndex + cellIndex;
+        if (fieldIndex < fields.length) {
+          const field = fields[fieldIndex];
+          if (field === 'productId') {
+            const product = products.find(p => p.name === cell.trim());
+            if (product) {
+              updatedPurchases[targetIndex][field] = product.id;
+            }
+          } else if (field === 'quantity') {
+            updatedPurchases[targetIndex][field] = parseFloat(cell) || '';
+          } else {
+            updatedPurchases[targetIndex][field] = cell.trim();
+          }
+        }
+      });
+    });
+
+    setPurchases(updatedPurchases);
+  };
+
+  // 处理表格粘贴（出库）
+  const handleOutboundPaste = (e, rowId, cellField) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text');
+    const rows = pastedData.split('\n').filter(row => row.trim());
+    
+    const currentIndex = outbounds.findIndex(o => o.id === rowId);
+    if (currentIndex === -1) return;
+
+    const updatedOutbounds = [...outbounds];
+    
+    rows.forEach((row, rowIndex) => {
+      const cells = row.split('\t');
+      const targetIndex = currentIndex + rowIndex;
+      
+      if (targetIndex >= updatedOutbounds.length) {
+        updatedOutbounds.push({
+          id: Date.now() + rowIndex,
+          productId: products[0]?.id || '',
+          quantity: '',
+          date: new Date().toISOString().split('T')[0],
+          purpose: '销售',
+          remark: ''
+        });
+      }
+
+      const fields = ['date', 'productId', 'quantity', 'purpose', 'remark'];
+      const startFieldIndex = fields.indexOf(cellField);
+      
+      cells.forEach((cell, cellIndex) => {
+        const fieldIndex = startFieldIndex + cellIndex;
+        if (fieldIndex < fields.length) {
+          const field = fields[fieldIndex];
+          if (field === 'productId') {
+            const product = products.find(p => p.name === cell.trim());
+            if (product) {
+              updatedOutbounds[targetIndex][field] = product.id;
+            }
+          } else if (field === 'quantity') {
+            updatedOutbounds[targetIndex][field] = parseFloat(cell) || '';
+          } else {
+            updatedOutbounds[targetIndex][field] = cell.trim();
+          }
+        }
+      });
+    });
+
+    setOutbounds(updatedOutbounds);
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-3xl font-bold text-gray-800 mb-6">进销存管理系统</h1>
+        
+        {/* 统计卡片 */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="bg-white p-4 rounded-lg shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">总进货量</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {inventory.reduce((sum, item) => sum + item.totalPurchase, 0)}
+                </p>
+              </div>
+              <Download className="text-blue-600" size={32} />
+            </div>
+          </div>
+          
+          <div className="bg-white p-4 rounded-lg shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">总出库量</p>
+                <p className="text-2xl font-bold text-red-600">
+                  {inventory.reduce((sum, item) => sum + item.totalOutbound, 0)}
+                </p>
+              </div>
+              <Upload className="text-red-600" size={32} />
+            </div>
+          </div>
+          
+          <div className="bg-white p-4 rounded-lg shadow">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">当前库存</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {inventory.reduce((sum, item) => sum + item.currentStock, 0)}
+                </p>
+              </div>
+              <Package className="text-green-600" size={32} />
+            </div>
+          </div>
+        </div>
+
+        {/* 标签页 */}
+        <div className="bg-white rounded-lg shadow mb-6">
+          <div className="flex border-b">
+            <button
+              onClick={() => setActiveTab('stock')}
+              className={`px-6 py-3 font-medium ${activeTab === 'stock' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}`}
+            >
+              库存汇总
+            </button>
+            <button
+              onClick={() => setActiveTab('products')}
+              className={`px-6 py-3 font-medium ${activeTab === 'products' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}`}
+            >
+              商品设置
+            </button>
+            <button
+              onClick={() => setActiveTab('purchases')}
+              className={`px-6 py-3 font-medium ${activeTab === 'purchases' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}`}
+            >
+              进货记录
+            </button>
+            <button
+              onClick={() => setActiveTab('outbounds')}
+              className={`px-6 py-3 font-medium ${activeTab === 'outbounds' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'}`}
+            >
+              出库记录
+            </button>
+          </div>
+
+          <div className="p-6">
+            {/* 库存汇总 */}
+            {activeTab === 'stock' && (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border px-4 py-2 text-left">商品名称</th>
+                      <th className="border px-4 py-2 text-center">单位</th>
+                      <th className="border px-4 py-2 text-right">期初库存</th>
+                      <th className="border px-4 py-2 text-right bg-blue-50">累计进货</th>
+                      <th className="border px-4 py-2 text-right bg-red-50">累计出库</th>
+                      <th className="border px-4 py-2 text-right bg-green-50 font-bold">当前库存</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inventory.map(item => (
+                      <tr key={item.id} className="hover:bg-gray-50">
+                        <td className="border px-4 py-3">{item.name}</td>
+                        <td className="border px-4 py-3 text-center">{item.unit}</td>
+                        <td className="border px-4 py-3 text-right">{item.initialStock}</td>
+                        <td className="border px-4 py-3 text-right text-blue-600 font-medium">+{item.totalPurchase}</td>
+                        <td className="border px-4 py-3 text-right text-red-600 font-medium">-{item.totalOutbound}</td>
+                        <td className="border px-4 py-3 text-right font-bold text-green-600 text-lg">{item.currentStock}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* 商品设置 */}
+            {activeTab === 'products' && (
+              <div>
+                <button
+                  onClick={addProduct}
+                  className="mb-4 flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                >
+                  <Plus size={20} /> 添加商品
+                </button>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border px-4 py-2 text-left">商品名称</th>
+                        <th className="border px-4 py-2 text-center">单位</th>
+                        <th className="border px-4 py-2 text-right">期初库存</th>
+                        <th className="border px-4 py-2 text-center">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {products.map(product => (
+                        <tr key={product.id} className="hover:bg-gray-50">
+                          <td className="border px-4 py-3">
+                            <input
+                              type="text"
+                              value={product.name}
+                              onChange={(e) => updateProduct(product.id, 'name', e.target.value)}
+                              className="w-full px-2 py-1 border rounded"
+                            />
+                          </td>
+                          <td className="border px-4 py-3">
+                            <input
+                              type="text"
+                              value={product.unit}
+                              onChange={(e) => updateProduct(product.id, 'unit', e.target.value)}
+                              className="w-full px-2 py-1 border rounded text-center"
+                            />
+                          </td>
+                          <td className="border px-4 py-3">
+                            <input
+                              type="number"
+                              value={product.initialStock}
+                              onChange={(e) => updateProduct(product.id, 'initialStock', parseFloat(e.target.value) || 0)}
+                              className="w-full px-2 py-1 border rounded text-right"
+                            />
+                          </td>
+                          <td className="border px-4 py-3 text-center">
+                            <button
+                              onClick={() => deleteProduct(product.id)}
+                              className="text-red-600 hover:text-red-800"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* 进货记录 */}
+            {activeTab === 'purchases' && (
+              <div>
+                <div className="mb-4 flex items-center gap-4">
+                  <button
+                    onClick={addPurchaseRows}
+                    className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                  >
+                    <Plus size={20} /> 添加10行
+                  </button>
+                  <span className="text-sm text-gray-600">💡 提示：可以从Excel复制粘贴多行数据</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border px-4 py-2 text-left">日期</th>
+                        <th className="border px-4 py-2 text-left">商品名称</th>
+                        <th className="border px-4 py-2 text-right">数量</th>
+                        <th className="border px-4 py-2 text-left">供应商</th>
+                        <th className="border px-4 py-2 text-left">备注</th>
+                        <th className="border px-4 py-2 text-center">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {purchases.map(purchase => {
+                        const product = products.find(p => p.id === purchase.productId);
+                        return (
+                          <tr key={purchase.id} className={`hover:bg-gray-50 ${purchase.isNew ? 'bg-blue-50' : ''}`}>
+                            <td className="border px-2 py-2">
+                              <input
+                                type="date"
+                                value={purchase.date}
+                                onChange={(e) => updatePurchase(purchase.id, 'date', e.target.value)}
+                                onPaste={(e) => handlePurchasePaste(e, purchase.id, 'date')}
+                                className="w-full px-2 py-1 border rounded"
+                              />
+                            </td>
+                            <td className="border px-2 py-2">
+                              <select
+                                value={purchase.productId}
+                                onChange={(e) => updatePurchase(purchase.id, 'productId', parseInt(e.target.value))}
+                                onPaste={(e) => handlePurchasePaste(e, purchase.id, 'productId')}
+                                className="w-full px-2 py-1 border rounded"
+                              >
+                                {products.map(p => (
+                                  <option key={p.id} value={p.id}>{p.name}</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="border px-2 py-2">
+                              <input
+                                type="number"
+                                value={purchase.quantity}
+                                onChange={(e) => updatePurchase(purchase.id, 'quantity', parseFloat(e.target.value) || '')}
+                                onPaste={(e) => handlePurchasePaste(e, purchase.id, 'quantity')}
+                                className="w-full px-2 py-1 border rounded text-right"
+                                placeholder="0"
+                              />
+                            </td>
+                            <td className="border px-2 py-2">
+                              <input
+                                type="text"
+                                value={purchase.supplier}
+                                onChange={(e) => updatePurchase(purchase.id, 'supplier', e.target.value)}
+                                onPaste={(e) => handlePurchasePaste(e, purchase.id, 'supplier')}
+                                className="w-full px-2 py-1 border rounded"
+                                placeholder="供应商"
+                              />
+                            </td>
+                            <td className="border px-2 py-2">
+                              <input
+                                type="text"
+                                value={purchase.remark}
+                                onChange={(e) => updatePurchase(purchase.id, 'remark', e.target.value)}
+                                onPaste={(e) => handlePurchasePaste(e, purchase.id, 'remark')}
+                                className="w-full px-2 py-1 border rounded"
+                                placeholder="备注"
+                              />
+                            </td>
+                            <td className="border px-2 py-2 text-center">
+                              <button
+                                onClick={() => deletePurchase(purchase.id)}
+                                className="text-red-600 hover:text-red-800"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* 出库记录 */}
+            {activeTab === 'outbounds' && (
+              <div>
+                <div className="mb-4 flex items-center gap-4">
+                  <button
+                    onClick={addOutboundRows}
+                    className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                  >
+                    <Plus size={20} /> 添加10行
+                  </button>
+                  <span className="text-sm text-gray-600">💡 提示：可以从Excel复制粘贴多行数据</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border px-4 py-2 text-left">日期</th>
+                        <th className="border px-4 py-2 text-left">商品名称</th>
+                        <th className="border px-4 py-2 text-right">数量</th>
+                        <th className="border px-4 py-2 text-left">用途</th>
+                        <th className="border px-4 py-2 text-left">备注</th>
+                        <th className="border px-4 py-2 text-center">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {outbounds.map(outbound => {
+                        const product = products.find(p => p.id === outbound.productId);
+                        return (
+                          <tr key={outbound.id} className={`hover:bg-gray-50 ${outbound.isNew ? 'bg-red-50' : ''}`}>
+                            <td className="border px-2 py-2">
+                              <input
+                                type="date"
+                                value={outbound.date}
+                                onChange={(e) => updateOutbound(outbound.id, 'date', e.target.value)}
+                                onPaste={(e) => handleOutboundPaste(e, outbound.id, 'date')}
+                                className="w-full px-2 py-1 border rounded"
+                              />
+                            </td>
+                            <td className="border px-2 py-2">
+                              <select
+                                value={outbound.productId}
+                                onChange={(e) => updateOutbound(outbound.id, 'productId', parseInt(e.target.value))}
+                                onPaste={(e) => handleOutboundPaste(e, outbound.id, 'productId')}
+                                className="w-full px-2 py-1 border rounded"
+                              >
+                                {products.map(p => (
+                                  <option key={p.id} value={p.id}>{p.name}</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="border px-2 py-2">
+                              <input
+                                type="number"
+                                value={outbound.quantity}
+                                onChange={(e) => updateOutbound(outbound.id, 'quantity', parseFloat(e.target.value) || '')}
+                                onPaste={(e) => handleOutboundPaste(e, outbound.id, 'quantity')}
+                                className="w-full px-2 py-1 border rounded text-right"
+                                placeholder="0"
+                              />
+                            </td>
+                            <td className="border px-2 py-2">
+                              <input
+                                type="text"
+                                value={outbound.purpose}
+                                onChange={(e) => updateOutbound(outbound.id, 'purpose', e.target.value)}
+                                onPaste={(e) => handleOutboundPaste(e, outbound.id, 'purpose')}
+                                className="w-full px-2 py-1 border rounded"
+                                placeholder="销售/生产/其他"
+                              />
+                            </td>
+                            <td className="border px-2 py-2">
+                              <input
+                                type="text"
+                                value={outbound.remark}
+                                onChange={(e) => updateOutbound(outbound.id, 'remark', e.target.value)}
+                                onPaste={(e) => handleOutboundPaste(e, outbound.id, 'remark')}
+                                className="w-full px-2 py-1 border rounded"
+                                placeholder="备注"
+                              />
+                            </td>
+                            <td className="border px-2 py-2 text-center">
+                              <button
+                                onClick={() => deleteOutbound(outbound.id)}
+                                className="text-red-600 hover:text-red-800"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default InventorySystem;
