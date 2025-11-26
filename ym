@@ -1,23 +1,178 @@
-import React, { useState } from 'react';
+#!/bin/bash
+
+# --- 1. 创建项目目录和子目录 ---
+mkdir jxc-inventory-system
+cd jxc-inventory-system
+mkdir -p src/components
+
+echo "--- 正在创建项目文件和目录... ---"
+
+# --- 2. 创建根目录文件 ---
+
+cat > package.json << 'EOF'
+{
+  "name": "jxc-inventory-system",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "lucide-react": "^0.309.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.4.0",
+    "vite": "^5.0.8"
+  }
+}
+EOF
+
+cat > index.html << 'EOF'
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>进销存管理系统</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+EOF
+
+cat > tailwind.config.js << 'EOF'
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+}
+EOF
+
+cat > postcss.config.js << 'EOF'
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+EOF
+
+cat > vite.config.js << 'EOF'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  build: {
+    outDir: 'dist' 
+  }
+});
+EOF
+
+# --- 3. 创建 src/ 文件 ---
+
+cat > src/index.css << 'EOF'
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+EOF
+
+cat > src/main.jsx << 'EOF'
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App.jsx';
+import './index.css';
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);
+EOF
+
+cat > src/App.jsx << 'EOF'
+import InventorySystem from './components/InventorySystem';
+
+function App() {
+  return (
+    <div className="App">
+      <InventorySystem />
+    </div>
+  );
+}
+
+export default App;
+EOF
+
+# --- 4. 创建核心组件文件 ---
+
+cat > src/components/InventorySystem.jsx << 'EOF'
+import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Trash2, Package, Download, Upload } from 'lucide-react';
+
+// --- 优化：LocalStorage 数据持久化辅助函数 ---
+const getInitialState = (key, defaultValue) => {
+  try {
+    const stored = localStorage.getItem(key);
+    // 确保解析成功，否则返回默认值
+    return stored ? JSON.parse(stored) : defaultValue;
+  } catch (error) {
+    console.error("Error retrieving state from localStorage", error);
+    return defaultValue;
+  }
+};
 
 const InventorySystem = () => {
   const [activeTab, setActiveTab] = useState('stock');
-  const [products, setProducts] = useState([
+
+  // --- 优化：从 LocalStorage 初始化数据 ---
+  const [products, setProducts] = useState(() => getInitialState('jxc_products', [
     { id: 1, name: '商品A', unit: '件', initialStock: 100 },
     { id: 2, name: '商品B', unit: '个', initialStock: 50 },
     { id: 3, name: '商品C', unit: '箱', initialStock: 30 }
-  ]);
-  const [purchases, setPurchases] = useState([
+  ]));
+  const [purchases, setPurchases] = useState(() => getInitialState('jxc_purchases', [
     { id: 1, productId: 1, quantity: 50, date: '2024-11-01', supplier: '供应商A', remark: '' },
     { id: 2, productId: 2, quantity: 30, date: '2024-11-05', supplier: '供应商B', remark: '' }
-  ]);
-  const [outbounds, setOutbounds] = useState([
+  ]));
+  const [outbounds, setOutbounds] = useState(() => getInitialState('jxc_outbounds', [
     { id: 1, productId: 1, quantity: 40, date: '2024-11-10', purpose: '销售', remark: '' },
     { id: 2, productId: 2, quantity: 20, date: '2024-11-12', purpose: '销售', remark: '' }
-  ]);
+  ]));
 
-  // 计算库存
+  // --- 优化：使用 useEffect 将数据同步到 LocalStorage ---
+  useEffect(() => {
+    localStorage.setItem('jxc_products', JSON.stringify(products));
+  }, [products]);
+
+  useEffect(() => {
+    localStorage.setItem('jxc_purchases', JSON.stringify(purchases));
+  }, [purchases]);
+
+  useEffect(() => {
+    localStorage.setItem('jxc_outbounds', JSON.stringify(outbounds));
+  }, [outbounds]);
+
+
+  // 计算库存的核心逻辑
   const calculateInventory = () => {
     return products.map(product => {
       const totalPurchase = purchases
@@ -39,12 +194,13 @@ const InventorySystem = () => {
     });
   };
 
-  const inventory = calculateInventory();
+  // --- 优化：使用 useMemo 避免每次渲染都重新计算库存 ---
+  const inventory = useMemo(() => calculateInventory(), [products, purchases, outbounds]);
 
   // 批量添加进货
   const addPurchaseRows = () => {
     const newRows = Array(10).fill(null).map((_, index) => ({
-      id: Date.now() + index,
+      id: Date.now() + index + Math.random(), // 确保ID唯一性
       productId: products[0]?.id || '',
       quantity: '',
       date: new Date().toISOString().split('T')[0],
@@ -58,7 +214,7 @@ const InventorySystem = () => {
   // 批量添加出库
   const addOutboundRows = () => {
     const newRows = Array(10).fill(null).map((_, index) => ({
-      id: Date.now() + index,
+      id: Date.now() + index + Math.random(), // 确保ID唯一性
       productId: products[0]?.id || '',
       quantity: '',
       date: new Date().toISOString().split('T')[0],
@@ -135,7 +291,7 @@ const InventorySystem = () => {
       if (targetIndex >= updatedPurchases.length) {
         // 自动添加新行
         updatedPurchases.push({
-          id: Date.now() + rowIndex,
+          id: Date.now() + rowIndex + Math.random(),
           productId: products[0]?.id || '',
           quantity: '',
           date: new Date().toISOString().split('T')[0],
@@ -144,6 +300,7 @@ const InventorySystem = () => {
         });
       }
 
+      // 粘贴字段顺序：日期, 商品名称, 数量, 供应商, 备注
       const fields = ['date', 'productId', 'quantity', 'supplier', 'remark'];
       const startFieldIndex = fields.indexOf(cellField);
       
@@ -152,6 +309,7 @@ const InventorySystem = () => {
         if (fieldIndex < fields.length) {
           const field = fields[fieldIndex];
           if (field === 'productId') {
+            // 尝试通过商品名称匹配 ID
             const product = products.find(p => p.name === cell.trim());
             if (product) {
               updatedPurchases[targetIndex][field] = product.id;
@@ -185,7 +343,7 @@ const InventorySystem = () => {
       
       if (targetIndex >= updatedOutbounds.length) {
         updatedOutbounds.push({
-          id: Date.now() + rowIndex,
+          id: Date.now() + rowIndex + Math.random(),
           productId: products[0]?.id || '',
           quantity: '',
           date: new Date().toISOString().split('T')[0],
@@ -194,6 +352,7 @@ const InventorySystem = () => {
         });
       }
 
+      // 粘贴字段顺序：日期, 商品名称, 数量, 用途, 备注
       const fields = ['date', 'productId', 'quantity', 'purpose', 'remark'];
       const startFieldIndex = fields.indexOf(cellField);
       
@@ -423,6 +582,7 @@ const InventorySystem = () => {
                               />
                             </td>
                             <td className="border px-2 py-2">
+                              {/* 优化：为了支持Excel粘贴，这里保留下拉框，但粘贴逻辑已优化为识别商品名称 */}
                               <select
                                 value={purchase.productId}
                                 onChange={(e) => updatePurchase(purchase.id, 'productId', parseInt(e.target.value))}
@@ -585,3 +745,13 @@ const InventorySystem = () => {
 };
 
 export default InventorySystem;
+EOF
+
+echo "--- ✅ 项目文件已创建在 ./jxc-inventory-system 文件夹中。 ---"
+
+# 引导用户进行下一步
+echo "下一步：
+1. cd jxc-inventory-system
+2. npm install (安装依赖)
+3. git init
+4. 将本地项目推送到您的 GitHub 仓库。"
